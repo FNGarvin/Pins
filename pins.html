@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Game of Pins</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            margin: 0;
+            touch-action: none; /* Prevents scrolling on touch devices during drag */
+        }
+        #game-container {
+            text-align: center;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        #game-board {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-top: 20px;
+            background-color: #f9f9f9;
+        }
+        .pin {
+            fill: #4a90e2;
+            stroke: #336699;
+            stroke-width: 2;
+            transition: fill 0.2s;
+            cursor: pointer;
+        }
+        .pin:hover {
+            fill: #357abd;
+        }
+        .pin.highlighted {
+            fill: #d0021b; /* Highlight color for selected pins */
+        }
+        .pin.removing {
+            transition: opacity 0.5s;
+            opacity: 0;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4a90e2;
+            color: white;
+            margin: 0 10px;
+        }
+        button:hover {
+            background-color: #357abd;
+        }
+        #status {
+            font-size: 1.2em;
+            font-weight: bold;
+            min-height: 25px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h1>The Game of Pins</h1>
+        <div class="controls">
+            <label>Difficulty:</label>
+            <select id="difficulty">
+                <option value="novice">Novice</option>
+                <option value="intermediate" selected>Intermediate</option>
+                <option value="expert">Expert</option>
+            </select>
+            <button id="restart-btn">Start Game</button>
+        </div>
+        <div id="status">Select a difficulty and press Start.</div>
+        <svg id="game-board" width="500" height="300"></svg>
+    </div>
+
+    <script>
+        const INITIAL_ROWS = [3, 5, 7];
+        const SVG_NS = "http://www.w3.org/2000/svg";
+
+        // --- DOM Elements ---
+        const svgBoard = document.getElementById('game-board');
+        const statusDisplay = document.getElementById('status');
+        const restartButton = document.getElementById('restart-btn');
+        const difficultySelector = document.getElementById('difficulty');
+
+        // --- Game State ---
+        let boardState = [];
+        let currentPlayer = 'player';
+        let isPlayerTurn = false;
+        let gameActive = false;
+
+        // --- Dragging State ---
+        let isDragging = false;
+        let selectedPins = [];
+        let startPinInfo = null;
+        
+        // --- AI Logic (Ported from Python) ---
+        const ai = {
+            getMove: (difficulty, currentBoard) => {
+                switch (difficulty) {
+                    case 'intermediate':
+                        return Math.random() < 0.6 ? ai.expert(currentBoard) : ai.novice(currentBoard);
+                    case 'expert':
+                        return ai.expert(currentBoard);
+                    case 'novice':
+                    default:
+                        return ai.novice(currentBoard);
+                }
+            },
+            novice: (currentBoard) => {
+                const moves = gameLogic.getAllPossibleMoves(currentBoard);
+                return moves[Math.floor(Math.random() * moves.length)];
+            },
+            expert: (currentBoard) => {
+                const allMoves = gameLogic.getAllPossibleMoves(currentBoard);
+                // Shuffle for variety
+                for (let i = allMoves.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [allMoves[i], allMoves[j]] = [allMoves[j], allMoves[i]];
+                }
+
+                for (const move of allMoves) {
+                    const nextState = gameLogic.applyMove(currentBoard, move);
+                    const allNextBlocks = nextState.flat();
+                    const isNextStateEndgame = allNextBlocks.every(b => b === 1);
+                    
+                    if (isNextStateEndgame) {
+                        if (allNextBlocks.length % 2 === 1) return move;
+                    } else {
+                        if (gameLogic.getNimSum(nextState) === 0) return move;
+                    }
+                }
+                return allMoves[0] || null; // Return first move if in losing position
+            }
+        };
+
+        // --- Game Logic (Ported from Python) ---
+        const gameLogic = {
+            getAllPossibleMoves: (state) => {
+                const moves = [];
+                state.forEach((row, rowIdx) => {
+                    row.forEach((blockSize, blockIdx) => {
+                        for (let count = 1; count <= blockSize; count++) {
+                            for (let start = 0; start <= blockSize - count; start++) {
+                                moves.push({ rowIdx, blockIdx, start, count });
+                            }
+                        }
+                    });
+                });
+                return moves;
+            },
+            applyMove: (state, move) => {
+                const { rowIdx, blockIdx, start, count } = move;
+                const newState = JSON.parse(JSON.stringify(state)); // Deep copy
+                
+                const blockSize = newState[rowIdx][blockIdx];
+                newState[rowIdx].splice(blockIdx, 1);
+
+                const leftBlockSize = start;
+                const rightBlockSize = blockSize - (start + count);
+
+                if (leftBlockSize > 0) newState[rowIdx].push(leftBlockSize);
+                if (rightBlockSize > 0) newState[rowIdx].push(rightBlockSize);
+                
+                newState[rowIdx].sort((a, b) => a - b);
+                return newState.filter(row => row.length > 0);
+            },
+            getNimSum: (state) => {
+                const allBlocks = state.flat();
+                return allBlocks.length > 0 ? allBlocks.reduce((sum, val) => sum ^ val, 0) : 0;
+            }
+        };
+
+        // --- Rendering Logic ---
+        function drawBoard() {
+            svgBoard.innerHTML = ''; // Clear board
+            const pinWidth = 20, pinHeight = 40, pinSpacing = 10, rowSpacing = 60;
+            const boardWidth = svgBoard.getAttribute('width');
+
+            let y = 60;
+            boardState.forEach((row, rowIdx) => {
+                const totalRowWidth = row.reduce((sum, size) => sum + size * pinWidth + (size - 1) * pinSpacing, 0) + (row.length - 1) * (pinSpacing * 2);
+                let x = (boardWidth - totalRowWidth) / 2;
+
+                row.forEach((blockSize, blockIdx) => {
+                    for (let i = 0; i < blockSize; i++) {
+                        const pin = document.createElementNS(SVG_NS, 'rect');
+                        pin.setAttribute('x', x);
+                        pin.setAttribute('y', y);
+                        pin.setAttribute('width', pinWidth);
+                        pin.setAttribute('height', pinHeight);
+                        pin.setAttribute('rx', 5); // Rounded corners
+                        pin.classList.add('pin');
+
+                        // Attach data for identifying the pin
+                        pin.dataset.rowIdx = rowIdx;
+                        pin.dataset.blockIdx = blockIdx;
+                        pin.dataset.pinInBlockIdx = i;
+                        
+                        svgBoard.appendChild(pin);
+                        x += pinWidth + pinSpacing;
+                    }
+                    x += pinSpacing * 2; // Extra spacing between blocks
+                });
+                y += rowSpacing;
+            });
+        }
+
+        // --- Interaction Logic ---
+        function handleDragStart(e) {
+            if (!isPlayerTurn || !e.target.classList.contains('pin')) return;
+            isDragging = true;
+            svgBoard.style.cursor = 'pointer';
+            
+            startPinInfo = { ...e.target.dataset };
+            selectedPins = [e.target];
+            e.target.classList.add('highlighted');
+        }
+
+        function handleDragMove(e) {
+            if (!isDragging) return;
+            
+            // Clear previous selection except for the start pin
+            selectedPins.forEach(p => p.classList.remove('highlighted'));
+            selectedPins = [selectedPins[0]]; // Keep only start pin
+            selectedPins[0].classList.add('highlighted');
+
+            const allPins = [...svgBoard.querySelectorAll('.pin')];
+            const startPin = selectedPins[0];
+            const startRect = startPin.getBoundingClientRect();
+
+            // Get pointer position
+            const CTM = svgBoard.getScreenCTM();
+            const pointer = {
+                x: (e.clientX - CTM.e) / CTM.a,
+                y: (e.clientY - CTM.f) / CTM.d
+            };
+
+            const dragMinX = Math.min(parseFloat(startPin.getAttribute('x')), pointer.x);
+            const dragMaxX = Math.max(parseFloat(startPin.getAttribute('x')) + parseFloat(startPin.getAttribute('width')), pointer.x);
+
+            allPins.forEach(pin => {
+                if (pin.dataset.rowIdx === startPinInfo.rowIdx &&
+                    pin.dataset.blockIdx === startPinInfo.blockIdx &&
+                    pin !== startPin) {
+                    const pinX = parseFloat(pin.getAttribute('x'));
+                    if (pinX >= dragMinX && pinX <= dragMaxX) {
+                        pin.classList.add('highlighted');
+                        selectedPins.push(pin);
+                    }
+                }
+            });
+        }
+
+        function handleDragEnd(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            svgBoard.style.cursor = 'default';
+
+            if (selectedPins.length === 0) return;
+
+            // Sort selected pins to find start and count
+            selectedPins.sort((a,b) => parseInt(a.dataset.pinInBlockIdx) - parseInt(b.dataset.pinInBlockIdx));
+
+            const firstPin = selectedPins[0];
+            const move = {
+                rowIdx: parseInt(firstPin.dataset.rowIdx),
+                blockIdx: parseInt(firstPin.dataset.blockIdx),
+                start: parseInt(firstPin.dataset.pinInBlockIdx),
+                count: selectedPins.length
+            };
+            
+            // Animate and apply move
+            isPlayerTurn = false;
+            selectedPins.forEach(pin => pin.classList.add('removing'));
+            
+            setTimeout(() => {
+                boardState = gameLogic.applyMove(boardState, move);
+                if (gameLogic.getAllPossibleMoves(boardState).length === 0) {
+                    endGame();
+                } else {
+                    currentPlayer = 'cpu';
+                    triggerCpuTurn();
+                }
+            }, 500); // Wait for animation
+        }
+
+        // --- Game Flow ---
+        function startGame() {
+            boardState = INITIAL_ROWS.map(size => [size]);
+            gameActive = true;
+            currentPlayer = Math.random() < 0.5 ? 'player' : 'cpu';
+            
+            if (currentPlayer === 'player') {
+                isPlayerTurn = true;
+                statusDisplay.textContent = "Your turn.";
+            } else {
+                isPlayerTurn = false;
+                statusDisplay.textContent = "CPU starts.";
+                triggerCpuTurn();
+            }
+            drawBoard();
+        }
+
+        function triggerCpuTurn() {
+            statusDisplay.textContent = "CPU is thinking...";
+            isPlayerTurn = false;
+            gameActive = true;
+
+            setTimeout(() => {
+                const difficulty = difficultySelector.value;
+                const move = ai.getMove(difficulty, boardState);
+                
+                if(move) {
+                    const pinsToRemove = [];
+                    const allPins = [...svgBoard.querySelectorAll('.pin')];
+                    allPins.forEach(pin => {
+                        const pinRow = parseInt(pin.dataset.rowIdx);
+                        const pinBlock = parseInt(pin.dataset.blockIdx);
+                        const pinIndex = parseInt(pin.dataset.pinInBlockIdx);
+
+                        if (pinRow === move.rowIdx && pinBlock === move.blockIdx && pinIndex >= move.start && pinIndex < move.start + move.count) {
+                            pinsToRemove.push(pin);
+                        }
+                    });
+
+                    pinsToRemove.forEach(p => p.classList.add('removing'));
+                }
+
+                setTimeout(() => {
+                    if (move) {
+                        boardState = gameLogic.applyMove(boardState, move);
+                    }
+                    if (gameLogic.getAllPossibleMoves(boardState).length === 0) {
+                        endGame();
+                    } else {
+                        currentPlayer = 'player';
+                        isPlayerTurn = true;
+                        statusDisplay.textContent = "Your turn.";
+                        drawBoard();
+                    }
+                }, 500);
+            }, 1000); // Artificial delay for CPU
+        }
+
+        function endGame() {
+            gameActive = false;
+            isPlayerTurn = false;
+            const winner = currentPlayer === 'player' ? 'CPU' : 'Player';
+            statusDisplay.textContent = `All pins gone! ${winner} wins!`;
+        }
+
+        // --- Event Listeners ---
+        restartButton.addEventListener('click', startGame);
+        svgBoard.addEventListener('mousedown', handleDragStart);
+        svgBoard.addEventListener('mousemove', handleDragMove);
+        window.addEventListener('mouseup', handleDragEnd); // Listen on window to catch mouse-up outside SVG
+        
+        // Touch events for mobile
+        svgBoard.addEventListener('touchstart', (e) => handleDragStart(e.changedTouches[0]), { passive: true });
+        svgBoard.addEventListener('touchmove', (e) => handleDragMove(e.changedTouches[0]), { passive: true });
+        window.addEventListener('touchend', (e) => handleDragEnd(e.changedTouches[0]));
+
+    </script>
+</body>
+</html>
