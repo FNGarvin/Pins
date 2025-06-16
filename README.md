@@ -2,7 +2,7 @@
 
 A web-based implementation of a variation on the classic impartial game of Nim.
 
-**[Play the live version here!](https://fngarvin.github.io/Pins/pins.html)**
+**[Play the live version here!](https://fngarvin.github.io/Pins/)**
 
 ![Screenshot of the Pins game](pins_screenshot1.jpg "Screenshot") 
 
