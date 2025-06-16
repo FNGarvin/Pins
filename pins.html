@@ -46,6 +46,24 @@
         .pin-group { display: inline-block; padding: 5px; margin: 5px; border: 1px dashed #aaa; border-radius: 5px; background: #fafafa; }
         .pin-group-label { font-size: 1.5em; font-weight: bold; font-family: 'Courier New', Courier, monospace; }
         .strategy-footer { text-align: center; margin-top: 30px; font-style: italic; font-size: 0.9em; color: #888; }
+        
+        /* --- DEBUG PANEL --- */
+        #debug-log {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 250px;
+            height: 150px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            overflow-y: scroll;
+            padding: 5px;
+            z-index: 2000;
+        }
     </style>
 </head>
 <body>
@@ -63,7 +81,7 @@
             <button id="rules-btn">How to Play</button>
             <button id="strategy-btn">Strategy &amp; History</button>
         </div>
-        <div id="status"></div>
+        <div id="status">Start a new game!</div>
         <div id="konva-container"></div>
     </div>
     
@@ -92,17 +110,14 @@
         <div class="overlay-content">
             <span class="close-button" data-target="strategy-modal">&times;</span>
             <h2>The Secret of the Pins</h2>
-
             <div class="strategy-section">
                 <h3>A Game of Skill, Not Chance</h3>
                 <p>This simple game is a famous math puzzle! It belongs to a family of "Impartial Games," where the available moves depend only on the state of the game, not on which player is moving. Because of this, the game can be "solved," and there's a secret to finding the perfect move every time.</p>
             </div>
-
             <div class="strategy-section">
                 <h3>The Secret: Create Identical Pairs</h3>
                 <p>The secret is to stop seeing rows and start seeing <em>groups</em> of pins. The goal of a winning strategy is to always make a move that leaves the board in a state where the remaining groups can be perfectly paired up. A board like this is called a <strong>balanced</strong> position.</p>
                 <p>Let's look at an example from the middle of a game. Notice how we've identified four groups of pins:</p>
-                
                 <table class="strategy-table">
                     <thead><tr><th>Game Board View</th><th>Mental View (The Groups)</th></tr></thead>
                     <tbody>
@@ -132,7 +147,6 @@
                 </table>
                 <p>Can we make identical pairs from these four groups? We can pair up two of the <strong>3</strong>s, but we're left with another <strong>3</strong> and a <strong>5</strong>. They don't match! This is an <em>unbalanced</em> board, which means there is a winning move to be made.</p>
             </div>
-
             <div class="strategy-section">
                 <h3>Finding the Perfect Move</h3>
                 <p>The perfect move is to <strong>remove 2 pins from the middle of the 5-pin group</strong>. This turns that group of 5 into a group of 3. Here is the result:</p>
@@ -145,7 +159,6 @@
                 </div>
                 <p style="margin-top: 20px;">Now we have four groups of 3! We can make two perfect pairs. The board is now <strong>balanced</strong>. Any move your opponent makes will have to break one of these pairs, and you will always be able to find a move to balance the board again, leading you to victory.</p>
             </div>
-
             <div class="strategy-section">
                 <h3>Further Reading</h3>
                 <p>This "pairing" method is a fun way to understand the real math behind the game, called the <strong>Nim-sum</strong>, which uses binary numbers. To learn more, we recommend the official Wikipedia page.</p>
@@ -154,169 +167,90 @@
             <div class="strategy-footer">This presentation was created with the assistance of <a href="https://gemini.google.com" target="_blank" rel="noopener">Gemini</a>.</div>
         </div>
     </div>
-
+    
+    <div id="debug-log"></div>
 
     <script>
-        // --- Global Config & State ---
+        // SCRIPT BLOCK IS FROM PINS.GOOD.HTML (THE WORKING BASELINE)
         const INITIAL_ROWS = [3, 5, 7];
-        let boardState = []; let isPlayerTurn = false; let gameActive = false;
-        let selectionRect; let x1, y1;
+        let boardState = [];
+        let isPlayerTurn = false;
+        let gameActive = false;
+        let selectionRect;
+        let x1, y1;
 
-        // --- Konva Setup ---
         const container = document.querySelector('#konva-container');
         const stage = new Konva.Stage({ container: 'konva-container', width: container.clientWidth, height: 300 });
         const layer = new Konva.Layer();
         stage.add(layer);
         
-        // --- DOM Elements ---
         const statusDisplay = document.getElementById('status');
         const restartButton = document.getElementById('restart-btn');
         const rulesButton = document.getElementById('rules-btn');
-        const strategyButton = document.getElementById('strategy-btn');
+        const strategyButton = document.getElementById('strategy-btn'); // Added button
+        const difficultySelector = document.getElementById('difficulty');
         const rulesModal = document.getElementById('rules-modal');
-        const strategyModal = document.getElementById('strategy-modal');
+        const strategyModal = document.getElementById('strategy-modal'); // Added modal
+        const debugLogDiv = document.getElementById('debug-log');
         
-        // --- AI & Game Logic ---
-        const ai = {
-            getMove: (difficulty, currentBoard) => {
-                switch (difficulty) {
-                    case 'intermediate':
-                        return Math.random() < 0.6 ? ai.expert(currentBoard) : ai.novice(currentBoard);
-                    case 'expert':
-                        return ai.expert(currentBoard);
-                    case 'novice':
-                    default:
-                        return ai.novice(currentBoard);
-                }
-            },
-            novice: (currentBoard) => {
-                const moves = gameLogic.getAllPossibleMoves(currentBoard);
-                return moves[Math.floor(Math.random() * moves.length)];
-            },
-            expert: (currentBoard) => {
-                const allMoves = gameLogic.getAllPossibleMoves(currentBoard);
-                for (let i = allMoves.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [allMoves[i], allMoves[j]] = [allMoves[j], allMoves[i]];
-                }
-                for (const move of allMoves) {
-                    const nextState = gameLogic.applyMove(currentBoard, move);
-                    const allNextBlocks = nextState.flat();
-                    const isNextStateEndgame = allNextBlocks.every(b => b === 1);
-                    if (isNextStateEndgame) {
-                        if (allNextBlocks.length % 2 === 1) return move;
-                    } else {
-                        if (gameLogic.getNimSum(nextState) === 0) return move;
-                    }
-                }
-                return allMoves[0] || null;
-            }
-        };
-        const gameLogic = {
-            getAllPossibleMoves: (state) => {
-                const moves = [];
-                state.forEach((row, rowIdx) => {
-                    row.forEach((blockSize, blockIdx) => {
-                        for (let count = 1; count <= blockSize; count++) {
-                            for (let start = 0; start <= blockSize - count; start++) {
-                                moves.push({ rowIdx, blockIdx, start, count });
-                            }
-                        }
-                    });
-                });
-                return moves;
-            },
-            applyMove: (state, move) => {
-                const { rowIdx, blockIdx, start, count } = move;
-                const newState = JSON.parse(JSON.stringify(state));
-                const blockSize = newState[rowIdx][blockIdx];
-                newState[rowIdx].splice(blockIdx, 1);
-                const leftBlockSize = start;
-                const rightBlockSize = blockSize - (start + count);
-                if (leftBlockSize > 0) newState[rowIdx].push(leftBlockSize);
-                if (rightBlockSize > 0) newState[rowIdx].push(rightBlockSize);
-                newState[rowIdx].sort((a, b) => a - b);
-                return newState.filter(row => row.length > 0);
-            },
-            getNimSum: (state) => {
-                const allBlocks = state.flat();
-                return allBlocks.length > 0 ? allBlocks.reduce((sum, val) => sum ^ val, 0) : 0;
-            }
-        };
+        function debugLog(message) {
+            debugLogDiv.innerHTML += `> ${message}<br>`;
+            debugLogDiv.scrollTop = debugLogDiv.scrollHeight;
+        }
 
-        // --- Rendering & Game Flow ---
+        const ai = { getMove: (d,b) => { switch (d) { case 'intermediate': return Math.random()<0.6?ai.expert(b):ai.novice(b); case 'expert': return ai.expert(b); default: return ai.novice(b);}}, novice: (b) => {const m=gameLogic.getAllPossibleMoves(b); return m[Math.floor(Math.random()*m.length)];}, expert: (b) => {const m=gameLogic.getAllPossibleMoves(b); for(let i=m.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[m[i],m[j]]=[m[j],m[i]];} for(const move of m){const n=gameLogic.applyMove(b,move); const a=n.flat(); const e=a.every(b=>b===1); if(e){if(a.length%2===1)return move;}else{if(gameLogic.getNimSum(n)===0)return move;}} return m[0]||null;}};
+        const gameLogic = { getAllPossibleMoves: (s) => {const m=[]; s.forEach((r,ri)=>{r.forEach((bs,bi)=>{for(let c=1;c<=bs;c++){for(let st=0;st<=bs-c;st++){m.push({rowIdx:ri,blockIdx:bi,start:st,count:c});}}});}); return m;}, applyMove: (s,m) => {const{rowIdx:ri,blockIdx:bi,start:st,count:c}=m; const n=JSON.parse(JSON.stringify(s)); const bs=n[ri][bi]; n[ri].splice(bi,1); const l=st; const r=bs-(st+c); if(l>0)n[ri].push(l); if(r>0)n[ri].push(r); n[ri].sort((a,b)=>a-b); return n.filter(r=>r.length>0);}, getNimSum: (s)=>{const a=s.flat(); return a.length>0?a.reduce((sum,v)=>sum^v,0):0;}};
+
         function drawBoard() {
             layer.destroyChildren(); 
-            const pinWidth = 20, pinHeight = 40, pinSpacing = 10, rowSpacing = 60;
-            const boardWidth = stage.width();
-            let y = 60;
-            boardState.forEach((row, rowIdx) => {
-                const totalRowWidth = row.reduce((sum, size) => sum + size * pinWidth + (size - 1) * pinSpacing, 0) + (row.length - 1) * (pinSpacing * 2);
-                let x = (boardWidth - totalRowWidth) / 2;
-                row.forEach((blockSize, blockIdx) => {
-                    for (let i = 0; i < blockSize; i++) {
-                        const pin = new Konva.Rect({
-                            x: x, y: y,
-                            width: pinWidth, height: pinHeight,
-                            fill: '#007aff', stroke: '#0056b3', strokeWidth: 1,
-                            cornerRadius: 5, id: `pin-${rowIdx}-${blockIdx}-${i}`
-                        });
-                        pin.setAttr('gameData', { rowIdx, blockIdx, pinInBlockIdx: i });
+            const pinWidth=20, pinHeight=40, pinSpacing=10, rowSpacing=60;
+            const boardWidth=stage.width();
+            let y=60;
+            boardState.forEach((row,rowIdx)=>{
+                const totalRowWidth=row.reduce((sum,size)=>sum+size*pinWidth+(size-1)*pinSpacing,0)+(row.length-1)*(pinSpacing*2);
+                let x=(boardWidth-totalRowWidth)/2;
+                row.forEach((blockSize,blockIdx)=>{
+                    for(let i=0;i<blockSize;i++){
+                        const pin=new Konva.Rect({x:x,y:y,width:pinWidth,height:pinHeight,fill:'#007aff',stroke:'#0056b3',strokeWidth:1,cornerRadius:5,id:`pin-${rowIdx}-${blockIdx}-${i}`});
+                        pin.setAttr('gameData',{rowIdx,blockIdx,pinInBlockIdx:i});
                         layer.add(pin);
-                        x += pinWidth + pinSpacing;
+                        x+=pinWidth+pinSpacing;
                     }
-                    x += pinSpacing * 2;
+                    x+=pinSpacing*2;
                 });
-                y += rowSpacing;
+                y+=rowSpacing;
             });
             layer.batchDraw();
         }
 
         function processPlayerMove(pinsToRemove) {
+            debugLog(`Processing ${pinsToRemove.length} selected pins.`);
             if (pinsToRemove.length === 0) return;
             const firstPinData = pinsToRemove[0].getAttr('gameData');
             const targetRow = firstPinData.rowIdx;
             const targetBlock = firstPinData.blockIdx;
-            const indices = pinsToRemove.map(p => p.getAttr('gameData').pinInBlockIdx).sort((a, b) => a - b);
+            const indices = pinsToRemove.map(p => p.getAttr('gameData').pinInBlockIdx).sort((a,b)=>a-b);
             
             let isValid = true;
-            for (const pin of pinsToRemove) {
-                const data = pin.getAttr('gameData');
-                if (data.rowIdx !== targetRow || data.blockIdx !== targetBlock) {
-                    isValid = false;
-                    break;
-                }
-            }
-            if (isValid) {
-                for (let i = 0; i < indices.length - 1; i++) {
-                    if (indices[i + 1] !== indices[i] + 1) {
-                        isValid = false;
-                        break;
-                    }
-                }
-            }
+            for(const pin of pinsToRemove) { const data = pin.getAttr('gameData'); if(data.rowIdx!==targetRow || data.blockIdx!==targetBlock) isValid=false; }
+            for(let i=0; i<indices.length-1; i++) { if(indices[i+1]!==indices[i]+1) isValid=false; }
             
             if (!isValid) {
+                debugLog("Move invalid!");
                 statusDisplay.textContent = "Invalid move. Pins must be from the same contiguous block.";
-                drawBoard();
-                setTimeout(() => { if (isPlayerTurn) statusDisplay.textContent = "Your turn."; }, 2000);
+                setTimeout(() => { if(isPlayerTurn) statusDisplay.textContent = "Your turn."; }, 2000);
                 return;
             }
 
+            debugLog("Move is valid. Applying...");
             isPlayerTurn = false;
             const move = { rowIdx: targetRow, blockIdx: targetBlock, start: indices[0], count: indices.length };
 
-            pinsToRemove.forEach(pin => {
-                new Konva.Tween({ node: pin, duration: 0.5, opacity: 0, onFinish: () => pin.destroy() }).play();
-            });
+            pinsToRemove.forEach(pin => { new Konva.Tween({ node: pin, duration: 0.5, opacity: 0, onFinish: () => pin.destroy() }).play(); });
             setTimeout(() => {
                 boardState = gameLogic.applyMove(boardState, move);
-                drawBoard(); 
-                if (gameLogic.getAllPossibleMoves(boardState).length === 0) {
-                    endGame('CPU');
-                } else {
-                    triggerCpuTurn();
-                }
+                if (gameLogic.getAllPossibleMoves(boardState).length === 0) endGame('CPU');
+                else triggerCpuTurn();
             }, 550);
         }
 
@@ -325,10 +259,7 @@
             setTimeout(() => {
                 const difficulty = difficultySelector.value;
                 const move = ai.getMove(difficulty, boardState);
-                if (!move) {
-                    endGame('Player');
-                    return;
-                }
+                if (!move) { endGame('Player'); return; }
                 const pinsToRemove = [];
                 layer.find('Rect').forEach(pin => {
                     const data = pin.getAttr('gameData');
@@ -336,23 +267,18 @@
                         pinsToRemove.push(pin);
                     }
                 });
-                pinsToRemove.forEach(pin => {
-                    new Konva.Tween({ node: pin, duration: 0.5, opacity: 0, onFinish: () => pin.destroy() }).play();
-                });
+                pinsToRemove.forEach(pin => { new Konva.Tween({ node: pin, duration: 0.5, opacity: 0, onFinish: () => pin.destroy() }).play(); });
                 setTimeout(() => {
                     boardState = gameLogic.applyMove(boardState, move);
-                    if (gameLogic.getAllPossibleMoves(boardState).length === 0) {
-                        endGame('Player');
-                    } else {
-                        isPlayerTurn = true;
-                        statusDisplay.textContent = "Your turn.";
-                        drawBoard();
-                    }
+                    if (gameLogic.getAllPossibleMoves(boardState).length === 0) endGame('Player');
+                    else { isPlayerTurn = true; statusDisplay.textContent = "Your turn."; drawBoard(); }
                 }, 550);
             }, 1200);
         }
 
         function startGame() {
+            debugLogDiv.innerHTML = ""; 
+            debugLog("Starting new game...");
             gameActive = true;
             boardState = INITIAL_ROWS.map(size => [size]);
             isPlayerTurn = true;
@@ -361,37 +287,46 @@
         }
 
         function endGame(winner) {
-            gameActive = false;
-            isPlayerTurn = false;
+            gameActive = false; isPlayerTurn = false;
             statusDisplay.textContent = `Game Over! ${winner} wins!`;
+            debugLog(`Game Over! ${winner} wins!`);
         }
 
         // --- Event Listeners ---
-        restartButton.addEventListener('click', startGame);
-        rulesButton.addEventListener('click', () => { rulesModal.style.display = "block"; });
-        strategyButton.addEventListener('click', () => { strategyModal.style.display = "block"; });
-        
-        document.querySelectorAll('.close-button').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.getElementById(e.target.dataset.target).style.display = 'none';
+        // This is a new, robust block to handle all modals correctly.
+        function setupModalListeners() {
+            rulesButton.addEventListener('click', () => {
+                rulesModal.style.display = 'block';
             });
-        });
-        window.addEventListener('click', (event) => {
-            if (event.target.classList.contains('overlay')) {
-                event.target.style.display = "none";
-            }
-        });
+            strategyButton.addEventListener('click', () => {
+                strategyModal.style.display = 'block';
+            });
+
+            document.querySelectorAll('.close-button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    // Hide the closest parent overlay
+                    btn.closest('.overlay').style.display = 'none';
+                });
+            });
+
+            // Close by clicking background
+            window.addEventListener('click', (event) => {
+                if (event.target.classList.contains('overlay')) {
+                    event.target.style.display = "none";
+                }
+            });
+        }
+        
+        restartButton.addEventListener('click', startGame);
+        setupModalListeners(); // Initialize all UI button listeners
 
         stage.on('mousedown touchstart', (e) => {
             if (!isPlayerTurn || !gameActive) return;
             e.evt.preventDefault();
-            const pos = stage.getPointerPosition();
-            x1 = pos.x;
-            y1 = pos.y;
+            x1 = stage.getPointerPosition().x;
+            y1 = stage.getPointerPosition().y;
             selectionRect = new Konva.Rect({
-                fill: 'rgba(0,122,255,0.2)',
-                stroke: '#007aff',
-                strokeWidth: 1,
+                fill: 'rgba(0,122,255,0.2)', stroke: '#007aff', strokeWidth: 1,
             });
             layer.add(selectionRect);
         });
@@ -401,10 +336,8 @@
             e.evt.preventDefault();
             const pos = stage.getPointerPosition();
             selectionRect.setAttrs({
-                x: Math.min(x1, pos.x),
-                y: Math.min(y1, pos.y),
-                width: Math.abs(pos.x - x1),
-                height: Math.abs(pos.y - y1),
+                x: Math.min(x1, pos.x), y: Math.min(y1, pos.y),
+                width: Math.abs(pos.x - x1), height: Math.abs(pos.y - y1),
             });
             layer.batchDraw();
         });
@@ -412,14 +345,17 @@
         stage.on('mouseup touchend', (e) => {
             if (!selectionRect) return;
             e.evt.preventDefault();
+            debugLog("Mouse up event triggered.");
             
-            const intersectedPins = [];
             const selectionBox = selectionRect.getAttrs();
-            
+            debugLog(`Selection Box: x:${selectionBox.x.toFixed(0)}, y:${selectionBox.y.toFixed(0)}, w:${selectionBox.width.toFixed(0)}, h:${selectionBox.height.toFixed(0)}`);
+
+            const intersectedPins = [];
             layer.find('Rect').forEach(pin => {
                 if (pin === selectionRect) return;
                 if (Konva.Util.haveIntersection(selectionBox, pin.getAttrs())) {
                     intersectedPins.push(pin);
+                    debugLog(`  -> Intersection with ${pin.id()}`);
                 }
             });
             
@@ -430,8 +366,8 @@
             processPlayerMove(intersectedPins);
         });
         
-        // Auto-start the game on page load
-        startGame();
+        statusDisplay.textContent = 'Select a difficulty and press "New Game".';
     </script>
 </body>
 </html>
+
