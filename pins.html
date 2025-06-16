@@ -46,24 +46,6 @@
         .pin-group { display: inline-block; padding: 5px; margin: 5px; border: 1px dashed #aaa; border-radius: 5px; background: #fafafa; }
         .pin-group-label { font-size: 1.5em; font-weight: bold; font-family: 'Courier New', Courier, monospace; }
         .strategy-footer { text-align: center; margin-top: 30px; font-style: italic; font-size: 0.9em; color: #888; }
-        
-        /* --- DEBUG PANEL --- */
-        #debug-log {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            width: 250px;
-            height: 150px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: #0f0;
-            font-family: monospace;
-            font-size: 10px;
-            border: 1px solid #555;
-            border-radius: 5px;
-            overflow-y: scroll;
-            padding: 5px;
-            z-index: 2000;
-        }
     </style>
 </head>
 <body>
@@ -81,11 +63,11 @@
             <button id="rules-btn">How to Play</button>
             <button id="strategy-btn">Strategy &amp; History</button>
         </div>
-        <div id="status">Start a new game!</div>
+        <div id="status"></div>
         <div id="konva-container"></div>
     </div>
     
-    <footer>
+    <footer >
         Game by <a href="mailto:184324400+FNGarvin@users.noreply.github.com">FNG</a>.
         Released under the <a href="https://github.com/FNGarvin/Pins/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>.
         <br>
@@ -167,11 +149,9 @@
             <div class="strategy-footer">This presentation was created with the assistance of <a href="https://gemini.google.com" target="_blank" rel="noopener">Gemini</a>.</div>
         </div>
     </div>
-    
-    <div id="debug-log"></div>
 
     <script>
-        // SCRIPT BLOCK IS FROM PINS.GOOD.HTML (THE WORKING BASELINE)
+        // --- Global Config & State ---
         const INITIAL_ROWS = [3, 5, 7];
         let boardState = [];
         let isPlayerTurn = false;
@@ -179,11 +159,13 @@
         let selectionRect;
         let x1, y1;
 
+        // --- Konva Setup ---
         const container = document.querySelector('#konva-container');
         const stage = new Konva.Stage({ container: 'konva-container', width: container.clientWidth, height: 300 });
         const layer = new Konva.Layer();
         stage.add(layer);
         
+        // --- DOM Elements ---
         const statusDisplay = document.getElementById('status');
         const restartButton = document.getElementById('restart-btn');
         const rulesButton = document.getElementById('rules-btn');
@@ -224,7 +206,6 @@
         }
 
         function processPlayerMove(pinsToRemove) {
-            debugLog(`Processing ${pinsToRemove.length} selected pins.`);
             if (pinsToRemove.length === 0) return;
             const firstPinData = pinsToRemove[0].getAttr('gameData');
             const targetRow = firstPinData.rowIdx;
@@ -233,25 +214,23 @@
             
             let isValid = true;
             for(const pin of pinsToRemove) { const data = pin.getAttr('gameData'); if(data.rowIdx!==targetRow || data.blockIdx!==targetBlock) isValid=false; }
-            for(let i=0; i<indices.length-1; i++) { if(indices[i+1]!==indices[i]+1) isValid=false; }
+                            for(let i=0; i<indices.length-1; i++) { if(indices[i+1]!==indices[i]+1) isValid=false; }
             
             if (!isValid) {
-                debugLog("Move invalid!");
                 statusDisplay.textContent = "Invalid move. Pins must be from the same contiguous block.";
                 setTimeout(() => { if(isPlayerTurn) statusDisplay.textContent = "Your turn."; }, 2000);
                 return;
             }
 
-            debugLog("Move is valid. Applying...");
             isPlayerTurn = false;
             const move = { rowIdx: targetRow, blockIdx: targetBlock, start: indices[0], count: indices.length };
 
-            pinsToRemove.forEach(pin => { new Konva.Tween({ node: pin, duration: 0.5, opacity: 0, onFinish: () => pin.destroy() }).play(); });
+            pinsToRemove.forEach(pin => {                 new Konva.Tween({ node: pin, duration: 0.5, opacity: 0, onFinish: () => pin.destroy() }).play();             });
             setTimeout(() => {
                 boardState = gameLogic.applyMove(boardState, move);
                 if (gameLogic.getAllPossibleMoves(boardState).length === 0) endGame('CPU');
                 else triggerCpuTurn();
-            }, 550);
+                            }, 550);
         }
 
         function triggerCpuTurn() {
@@ -262,10 +241,10 @@
                 if (!move) { endGame('Player'); return; }
                 const pinsToRemove = [];
                 layer.find('Rect').forEach(pin => {
-                    const data = pin.getAttr('gameData');
-                    if (data.rowIdx === move.rowIdx && data.blockIdx === move.blockIdx && data.pinInBlockIdx >= move.start && data.pinInBlockIdx < move.start + move.count) {
-                        pinsToRemove.push(pin);
-                    }
+                        const data = pin.getAttr('gameData');
+                        if (data.rowIdx === move.rowIdx && data.blockIdx === move.blockIdx && data.pinInBlockIdx >= move.start && data.pinInBlockIdx < move.start + move.count) {
+                            pinsToRemove.push(pin);
+                        }
                 });
                 pinsToRemove.forEach(pin => { new Konva.Tween({ node: pin, duration: 0.5, opacity: 0, onFinish: () => pin.destroy() }).play(); });
                 setTimeout(() => {
@@ -277,8 +256,6 @@
         }
 
         function startGame() {
-            debugLogDiv.innerHTML = ""; 
-            debugLog("Starting new game...");
             gameActive = true;
             boardState = INITIAL_ROWS.map(size => [size]);
             isPlayerTurn = true;
@@ -287,17 +264,17 @@
         }
 
         function endGame(winner) {
-            gameActive = false; isPlayerTurn = false;
+            gameActive = false;
+            isPlayerTurn = false;
             statusDisplay.textContent = `Game Over! ${winner} wins!`;
-            debugLog(`Game Over! ${winner} wins!`);
         }
 
         // --- Event Listeners ---
-        // This is a new, robust block to handle all modals correctly.
         function setupModalListeners() {
             rulesButton.addEventListener('click', () => {
                 rulesModal.style.display = 'block';
             });
+
             strategyButton.addEventListener('click', () => {
                 strategyModal.style.display = 'block';
             });
@@ -318,7 +295,7 @@
         }
         
         restartButton.addEventListener('click', startGame);
-        setupModalListeners(); // Initialize all UI button listeners
+        setupModalListeners();
 
         stage.on('mousedown touchstart', (e) => {
             if (!isPlayerTurn || !gameActive) return;
@@ -336,8 +313,10 @@
             e.evt.preventDefault();
             const pos = stage.getPointerPosition();
             selectionRect.setAttrs({
-                x: Math.min(x1, pos.x), y: Math.min(y1, pos.y),
-                width: Math.abs(pos.x - x1), height: Math.abs(pos.y - y1),
+                x: Math.min(x1, pos.x),
+                y: Math.min(y1, pos.y),
+                width: Math.abs(pos.x - x1),
+                height: Math.abs(pos.y - y1),
             });
             layer.batchDraw();
         });
@@ -345,17 +324,14 @@
         stage.on('mouseup touchend', (e) => {
             if (!selectionRect) return;
             e.evt.preventDefault();
-            debugLog("Mouse up event triggered.");
             
             const selectionBox = selectionRect.getAttrs();
-            debugLog(`Selection Box: x:${selectionBox.x.toFixed(0)}, y:${selectionBox.y.toFixed(0)}, w:${selectionBox.width.toFixed(0)}, h:${selectionBox.height.toFixed(0)}`);
-
+            
             const intersectedPins = [];
             layer.find('Rect').forEach(pin => {
                 if (pin === selectionRect) return;
                 if (Konva.Util.haveIntersection(selectionBox, pin.getAttrs())) {
                     intersectedPins.push(pin);
-                    debugLog(`  -> Intersection with ${pin.id()}`);
                 }
             });
             
@@ -366,8 +342,10 @@
             processPlayerMove(intersectedPins);
         });
         
-        statusDisplay.textContent = 'Select a difficulty and press "New Game".';
+        // Auto-start the game on page load
+        startGame();
     </script>
 </body>
 </html>
+
 
